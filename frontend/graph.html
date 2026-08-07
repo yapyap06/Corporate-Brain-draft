@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Memory Graph — Corporate Brain</title>
+  <meta name="description" content="Explore the Corporate Memory Graph — visualise connections between meetings, decisions, people, and projects." />
+  <link rel="stylesheet" href="index.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="mock-data.js"></script>
+  <!-- D3 for graph rendering -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    .graph-page-layout {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+      align-items: start;
+    }
+    #graph-svg { width: 100%; display: block; background: #F7F8FA; border-radius: 0 0 12px 12px; }
+    .node circle { cursor: pointer; transition: r 150ms, stroke-width 150ms; }
+    .node circle:hover { stroke-width: 3px !important; }
+    .node text { font-family: Inter, sans-serif; font-size: 11px; fill: #111827; pointer-events: none; }
+    .link { stroke-opacity: 0.5; fill: none; }
+    .link.contradicts { stroke: #DC2626 !important; stroke-dasharray: 5,3; stroke-opacity: 0.8; }
+    .link-label { font-family: Inter, sans-serif; font-size: 10px; fill: #9CA3AF; }
+    .graph-toolbar {
+      padding: 12px 16px;
+      border-bottom: 1px solid #E5E7EB;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .side-panel-empty { padding: 40px 20px; text-align: center; color: #9CA3AF; }
+    .side-panel-empty svg { display: block; margin: 0 auto 12px; opacity: 0.3; }
+    .detail-thread { padding: 16px; }
+    .thread-node {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #F3F4F6;
+    }
+    .thread-node:last-child { border-bottom: none; }
+    .thread-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      flex-shrink: 0; margin-top: 4px;
+    }
+    .zoom-controls {
+      position: absolute; top: 10px; right: 10px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .zoom-btn {
+      width: 30px; height: 30px;
+      border: 1px solid #E5E7EB;
+      border-radius: 6px;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; color: #4B5563;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      transition: background 150ms;
+    }
+    .zoom-btn:hover { background: #F0F4FF; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon"><i data-lucide="brain" style="width:18px;height:18px;"></i></div>
+      <div class="sidebar-logo-text"><strong>Corporate Brain</strong><span>Organizational Intelligence</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html"    class="nav-item"><i data-lucide="layout-dashboard" class="nav-icon"></i><span>Dashboard</span></a>
+      <a href="meetings.html" class="nav-item"><i data-lucide="video" class="nav-icon"></i><span>Meetings</span></a>
+      <a href="graph.html"    class="nav-item active"><i data-lucide="git-fork" class="nav-icon"></i><span>Memory Graph</span></a>
+      <a href="chat.html"     class="nav-item"><i data-lucide="message-square" class="nav-icon"></i><span>Ask Brain</span></a>
+      <a href="settings.html" class="nav-item"><i data-lucide="settings" class="nav-icon"></i><span>Settings</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar">AC</div>
+        <div class="user-info"><strong>Alex Chen</strong><span>alex.chen@acmecorp.com</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content">
+    <div class="page-header">
+      <div class="page-title">
+        <h1>Memory Graph</h1>
+        <p>Explore the connections between meetings, decisions, people, and projects</p>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Filter Bar -->
+      <div class="filter-bar">
+        <span class="filter-label">Filter:</span>
+        <select id="filter-type" onchange="applyFilter()">
+          <option value="all">All Node Types</option>
+          <option value="meeting">Meetings only</option>
+          <option value="decision">Decisions only</option>
+          <option value="person">People only</option>
+          <option value="project">Projects only</option>
+        </select>
+        <select id="filter-edge" onchange="applyFilter()">
+          <option value="all">All Relationships</option>
+          <option value="contradicts">Contradictions only</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="resetGraph()">
+          <i data-lucide="refresh-cw" style="width:13px;height:13px;"></i>
+          Reset
+        </button>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12px;color:#6B7280;">
+          <i data-lucide="mouse-pointer-2" style="width:13px;height:13px;"></i>
+          Click a node to inspect · Drag to rearrange · Scroll to zoom
+        </div>
+      </div>
+
+      <!-- Graph + Side Panel -->
+      <div class="graph-page-layout">
+        <!-- Graph Canvas -->
+        <div class="card" style="position:relative;overflow:hidden;">
+          <div class="graph-toolbar">
+            <!-- Legend -->
+            <div style="display:flex;gap:14px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#4B5563;">
+                <div style="width:12px;height:12px;border-radius:50%;background:#2563EB;"></div> Meeting
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#4B5563;">
+                <div style="width:12px;height:12px;border-radius:50%;background:#059669;"></div> Decision
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#4B5563;">
+                <div style="width:12px;height:12px;border-radius:50%;background:#7C3AED;"></div> Person
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#4B5563;">
+                <div style="width:12px;height:12px;border-radius:50%;background:#D97706;"></div> Project
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#4B5563;">
+                <div style="width:28px;height:2px;background:#DC2626;border-top:2px dashed #DC2626;"></div> Contradicts
+              </div>
+            </div>
+          </div>
+          <svg id="graph-svg" height="500"></svg>
+
+          <!-- Zoom Controls -->
+          <div class="zoom-controls">
+            <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+            <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+            <button class="zoom-btn" id="zoom-reset" title="Fit to screen" style="font-size:12px;">
+              <i data-lucide="maximize-2" style="width:13px;height:13px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Side Panel -->
+        <div class="card graph-side-panel">
+          <div class="card-header">
+            <h2><i data-lucide="info" style="width:15px;height:15px;color:#2563EB;"></i> Node Detail</h2>
+          </div>
+          <div id="side-panel-content">
+            <div class="side-panel-empty">
+              <i data-lucide="mouse-pointer-click" style="width:36px;height:36px;display:block;margin:0 auto 10px;opacity:0.3;"></i>
+              <p style="font-size:13px;">Click any node in the graph to inspect its connections and history</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  lucide.createIcons();
+
+  const rawNodes = mockData.graph.nodes;
+  const rawEdges = mockData.graph.edges;
+
+  const nodeColors = {
+    meeting:  '#2563EB',
+    decision: '#059669',
+    person:   '#7C3AED',
+    project:  '#D97706',
+  };
+  const nodeRadius = { meeting: 22, decision: 18, person: 16, project: 20 };
+
+  let simulation, svgEl, zoomBehavior;
+
+  function buildGraph(nodes, edges) {
+    const container = document.getElementById('graph-svg').parentElement;
+    const W = container.clientWidth - 2;
+    const H = 500;
+
+    d3.select('#graph-svg').selectAll('*').remove();
+    svgEl = d3.select('#graph-svg').attr('width', W).attr('height', H);
+
+    zoomBehavior = d3.zoom().scaleExtent([0.3, 3]).on('zoom', e => g.attr('transform', e.transform));
+    svgEl.call(zoomBehavior);
+
+    const g = svgEl.append('g');
+
+    // Arrow markers
+    const defs = svgEl.append('defs');
+    ['default', 'contradiction'].forEach(type => {
+      defs.append('marker')
+        .attr('id', `arrow-${type}`)
+        .attr('viewBox', '0 -5 10 10').attr('refX', 28).attr('refY', 0)
+        .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+        .append('path').attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', type === 'contradiction' ? '#DC2626' : '#D1D5DB');
+    });
+
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(edges).id(d => d.id).distance(d => d.isContradiction ? 160 : 110))
+      .force('charge', d3.forceManyBody().strength(-300))
+      .force('center', d3.forceCenter(W / 2, H / 2))
+      .force('collision', d3.forceCollide().radius(d => nodeRadius[d.type] + 18));
+
+    // Links
+    const link = g.append('g').selectAll('line').data(edges).join('line')
+      .attr('class', d => 'link' + (d.isContradiction ? ' contradicts' : ''))
+      .attr('stroke', d => d.isContradiction ? '#DC2626' : '#D1D5DB')
+      .attr('stroke-width', d => d.isContradiction ? 2 : 1.5)
+      .attr('stroke-dasharray', d => d.isContradiction ? '5,3' : null)
+      .attr('marker-end', d => `url(#arrow-${d.isContradiction ? 'contradiction' : 'default'})`);
+
+    // Edge labels
+    const edgeLabel = g.append('g').selectAll('text').data(edges).join('text')
+      .attr('class', 'link-label').attr('text-anchor', 'middle')
+      .text(d => d.label);
+
+    // Nodes
+    const node = g.append('g').selectAll('g').data(nodes).join('g')
+      .attr('class', 'node')
+      .call(d3.drag()
+        .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('drag',  (event, d) => { d.fx = event.x; d.fy = event.y; })
+        .on('end',   (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+      )
+      .on('click', (event, d) => showNodeDetail(d));
+
+    node.append('circle')
+      .attr('r', d => nodeRadius[d.type])
+      .attr('fill', d => nodeColors[d.type])
+      .attr('fill-opacity', 0.15)
+      .attr('stroke', d => nodeColors[d.type])
+      .attr('stroke-width', 2);
+
+    node.append('text').attr('text-anchor', 'middle').attr('dy', d => nodeRadius[d.type] + 13)
+      .style('font-size', '11px').style('fill', '#374151').style('font-weight', '500')
+      .text(d => d.label.length > 16 ? d.label.slice(0, 14) + '…' : d.label);
+
+    // Node type icon (letter)
+    node.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em')
+      .style('font-size', '11px').style('font-weight', '700').style('fill', d => nodeColors[d.type])
+      .text(d => ({ meeting: 'M', decision: 'D', person: 'P', project: 'Pr' }[d.type]));
+
+    simulation.on('tick', () => {
+      link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      edgeLabel.attr('x', d => (d.source.x + d.target.x) / 2)
+               .attr('y', d => (d.source.y + d.target.y) / 2 - 4);
+      node.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+  }
+
+  // Node click → side panel
+  function showNodeDetail(d) {
+    const panel = document.getElementById('side-panel-content');
+    const color = nodeColors[d.type];
+    const typeLabel = { meeting: 'Meeting', decision: 'Decision', person: 'Person', project: 'Project' }[d.type];
+
+    // Find connected nodes
+    const connected = rawEdges.filter(e =>
+      (typeof e.source === 'object' ? e.source.id : e.source) === d.id ||
+      (typeof e.target === 'object' ? e.target.id : e.target) === d.id
+    );
+
+    const contradictionEdges = connected.filter(e => e.isContradiction);
+
+    let html = `<div class="detail-thread">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:${color}20;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <span style="font-size:14px;font-weight:700;color:${color};">${typeLabel[0]}</span>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#111827;">${d.label}</div>
+          <span class="badge" style="background:${color}20;color:${color};font-size:11px;">${typeLabel}</span>
+        </div>
+      </div>`;
+
+    if (contradictionEdges.length > 0) {
+      html += `<div class="flag-item warning" style="margin-bottom:12px;">
+        <i data-lucide="alert-triangle" style="width:14px;height:14px;color:#D97706;flex-shrink:0;"></i>
+        <div style="font-size:12px;color:#78350F;">This node is involved in a <strong>contradiction</strong> with another decision.</div>
+      </div>`;
+    }
+
+    html += `<div style="font-size:12px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Connections (${connected.length})</div>`;
+
+    if (connected.length === 0) {
+      html += `<div style="font-size:13px;color:#9CA3AF;">No direct connections.</div>`;
+    } else {
+      html += connected.map(e => {
+        const otherId = (typeof e.source === 'object' ? e.source.id : e.source) === d.id
+          ? (typeof e.target === 'object' ? e.target.id : e.target)
+          : (typeof e.source === 'object' ? e.source.id : e.source);
+        const other = rawNodes.find(n => n.id === otherId);
+        if (!other) return '';
+        const otherColor = nodeColors[other.type];
+        return `<div class="thread-node">
+          <div class="thread-dot" style="background:${otherColor};"></div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:#111827;">${other.label}</div>
+            <div style="font-size:11.5px;color:#9CA3AF;">${e.label} · ${other.type}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    if (d.type === 'meeting') {
+      html += `<div style="margin-top:12px;"><a href="meeting-detail.html?id=${d.id}" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;"><i data-lucide="external-link" style="width:13px;height:13px;"></i> Open Meeting</a></div>`;
+    }
+
+    html += '</div>';
+    panel.innerHTML = html;
+    lucide.createIcons();
+  }
+
+  // Filter
+  function applyFilter() {
+    const typeFilter = document.getElementById('filter-type').value;
+    const edgeFilter = document.getElementById('filter-edge').value;
+
+    let nodes = rawNodes.map(n => ({...n}));
+    let edges = rawEdges.map(e => ({...e}));
+
+    if (typeFilter !== 'all') nodes = nodes.filter(n => n.type === typeFilter);
+    if (edgeFilter === 'contradicts') edges = edges.filter(e => e.isContradiction);
+
+    const nodeIds = new Set(nodes.map(n => n.id));
+    edges = edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+
+    buildGraph(nodes, edges);
+  }
+
+  function resetGraph() {
+    document.getElementById('filter-type').value = 'all';
+    document.getElementById('filter-edge').value = 'all';
+    buildGraph(rawNodes.map(n => ({...n})), rawEdges.map(e => ({...e})));
+  }
+
+  // Zoom buttons
+  document.getElementById('zoom-in').addEventListener('click', () => {
+    svgEl.transition().call(zoomBehavior.scaleBy, 1.3);
+  });
+  document.getElementById('zoom-out').addEventListener('click', () => {
+    svgEl.transition().call(zoomBehavior.scaleBy, 0.75);
+  });
+  document.getElementById('zoom-reset').addEventListener('click', () => {
+    svgEl.transition().call(zoomBehavior.transform, d3.zoomIdentity);
+  });
+
+  // Init
+  buildGraph(rawNodes.map(n => ({...n})), rawEdges.map(e => ({...e})));
+  lucide.createIcons();
+</script>
+</body>
+</html>

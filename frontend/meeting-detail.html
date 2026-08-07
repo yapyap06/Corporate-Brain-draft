@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meeting Detail — Corporate Brain</title>
+  <meta name="description" content="View full meeting transcript, extracted decisions, AI flags, and action items for this meeting." />
+  <link rel="stylesheet" href="index.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="mock-data.js"></script>
+  <style>
+    .detail-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
+    .tab-bar { display:flex; gap:2px; border-bottom:1px solid #E5E7EB; margin-bottom:16px; }
+    .tab-btn { padding:8px 16px; font-size:13px; font-weight:500; color:#6B7280; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 150ms; }
+    .tab-btn:hover { color:#2563EB; }
+    .tab-btn.active { color:#2563EB; border-bottom-color:#2563EB; font-weight:600; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+    .flag-banner { background:#FEF3C7; border:1px solid #FCD34D; border-radius:10px; padding:14px 16px; margin-bottom:16px; }
+    .flag-banner-title { font-size:13px; font-weight:600; color:#92400E; display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+    .flag-banner-items { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+    .confidence-label { font-size:11px; font-weight:600; padding:2px 7px; border-radius:999px; }
+    .conf-firm   { background:#D1FAE5; color:#065F46; }
+    .conf-soft   { background:#DBEAFE; color:#1E40AF; }
+    .conf-unresolved { background:#F3F4F6; color:#6B7280; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon"><i data-lucide="brain" style="width:18px;height:18px;"></i></div>
+      <div class="sidebar-logo-text"><strong>Corporate Brain</strong><span>Organizational Intelligence</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html"    class="nav-item"><i data-lucide="layout-dashboard" class="nav-icon"></i><span>Dashboard</span></a>
+      <a href="meetings.html" class="nav-item active"><i data-lucide="video" class="nav-icon"></i><span>Meetings</span></a>
+      <a href="graph.html"    class="nav-item"><i data-lucide="git-fork" class="nav-icon"></i><span>Memory Graph</span></a>
+      <a href="chat.html"     class="nav-item"><i data-lucide="message-square" class="nav-icon"></i><span>Ask Brain</span></a>
+      <a href="settings.html" class="nav-item"><i data-lucide="settings" class="nav-icon"></i><span>Settings</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar">AC</div>
+        <div class="user-info"><strong>Alex Chen</strong><span>alex.chen@acmecorp.com</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content">
+    <div class="page-header">
+      <div class="page-title">
+        <div onclick="window.location.href='meetings.html'" class="back-link" style="margin-bottom:4px;">
+          <i data-lucide="arrow-left" style="width:14px;height:14px;"></i>
+          Back to Meetings
+        </div>
+        <h1 id="meeting-title">Loading...</h1>
+        <p id="meeting-meta" style="display:flex;align-items:center;gap:14px;margin-top:4px;"></p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm"><i data-lucide="share-2" style="width:14px;height:14px;"></i> Share</button>
+        <button class="btn btn-outline btn-sm"><i data-lucide="download" style="width:14px;height:14px;"></i> Export</button>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- AI Flags Banner -->
+      <div id="flags-banner" class="flag-banner" style="display:none;">
+        <div class="flag-banner-title">
+          <i data-lucide="alert-triangle" style="width:15px;height:15px;color:#D97706;"></i>
+          AI Analysis flagged issues in this meeting
+        </div>
+        <div class="flag-banner-items" id="flags-banner-items"></div>
+      </div>
+
+      <!-- Two Column: Transcript left, Decisions+Actions right -->
+      <div class="detail-grid">
+
+        <!-- Left: Transcript -->
+        <div class="card">
+          <div class="card-header">
+            <h2><i data-lucide="file-text" style="width:15px;height:15px;color:#2563EB;"></i> Transcript</h2>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <div style="position:relative;">
+                <i data-lucide="search" style="width:12px;height:12px;position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#9CA3AF;"></i>
+                <input id="transcript-search" type="text" placeholder="Search transcript..." style="padding:5px 10px 5px 26px;border:1px solid #E5E7EB;border-radius:6px;font-size:12.5px;width:180px;" oninput="renderTranscript()" />
+              </div>
+            </div>
+          </div>
+          <div class="card-body" style="max-height:560px;overflow-y:auto;padding:8px 16px;" id="transcript-body">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Right: Tabs (Decisions / Action Items) -->
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="card">
+            <div class="card-body" style="padding-top:16px;">
+              <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab('decisions', this)">
+                  <span id="decisions-tab-label">Decisions</span>
+                </button>
+                <button class="tab-btn" onclick="switchTab('actions', this)">
+                  <span id="actions-tab-label">Action Items</span>
+                </button>
+              </div>
+
+              <!-- Decisions Tab -->
+              <div class="tab-panel active" id="tab-decisions">
+                <div id="decisions-list"></div>
+              </div>
+
+              <!-- Actions Tab -->
+              <div class="tab-panel" id="tab-actions">
+                <div id="actions-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Participants Card -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i data-lucide="users" style="width:15px;height:15px;color:#059669;"></i> Participants</h2>
+            </div>
+            <div class="card-body" style="padding:12px 16px;" id="participants-list"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  lucide.createIcons();
+
+  // Get meeting ID from URL
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id') || 'm_001';
+  const meeting = mockData.meetings.find(m => m.id === id) || mockData.meetings[0];
+  const detail  = mockData.meetingDetail[meeting.id] || mockData.meetingDetail['m_001'];
+
+  // Header
+  document.getElementById('meeting-title').textContent = meeting.title;
+  document.getElementById('meeting-meta').innerHTML = `
+    <span style="display:flex;align-items:center;gap:4px;font-size:13px;color:#6B7280;">
+      <i data-lucide="calendar" style="width:13px;height:13px;"></i>
+      ${new Date(meeting.date).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'})}
+    </span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:13px;color:#6B7280;">
+      <i data-lucide="clock" style="width:13px;height:13px;"></i>
+      ${meeting.duration}
+    </span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:13px;color:#6B7280;">
+      <i data-lucide="users" style="width:13px;height:13px;"></i>
+      ${meeting.participants.length} participants
+    </span>
+  `;
+
+  // Flags Banner
+  if (detail.flags && detail.flags.length > 0) {
+    document.getElementById('flags-banner').style.display = 'block';
+    document.getElementById('flags-banner-items').innerHTML = detail.flags.map(f => {
+      const typeLabel = { contradiction: 'Contradiction', duplicate: 'Duplicate Discussion', policy: 'Policy Conflict', missing_stakeholder: 'Missing Stakeholder' };
+      const cls = f.severity === 'warning' ? 'badge-amber' : 'badge-blue';
+      return `<div style="display:flex;align-items:flex-start;gap:8px;">
+        <span class="badge ${cls}" style="margin-top:1px;flex-shrink:0;">${typeLabel[f.type] || f.type}</span>
+        <div>
+          <div style="font-size:13px;color:#78350F;">${f.detail}</div>
+          <a href="meeting-detail.html?id=${f.contradicts_meeting}" style="font-size:12px;color:#2563EB;margin-top:2px;display:inline-block;">View conflicting meeting</a>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Transcript
+  function renderTranscript() {
+    const q = document.getElementById('transcript-search').value.toLowerCase();
+    const body = document.getElementById('transcript-body');
+    const lines = detail.transcript.filter(l => !q || l.text.toLowerCase().includes(q) || l.speaker.toLowerCase().includes(q));
+    if (lines.length === 0) { body.innerHTML = `<div style="text-align:center;padding:24px;color:#9CA3AF;">No results for "${q}"</div>`; return; }
+    body.innerHTML = lines.map(l => {
+      const highlight = q ? l.text.replace(new RegExp(`(${q})`, 'gi'), '<mark style="background:#DBEAFE;border-radius:2px;">$1</mark>') : l.text;
+      return `<div class="transcript-line">
+        <span class="transcript-timestamp">${l.timestamp}</span>
+        <span class="transcript-speaker">${l.speaker}</span>
+        <span class="transcript-text">${highlight}</span>
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+  }
+  renderTranscript();
+
+  // Decisions
+  const confClass = { firm_commitment: 'conf-firm', soft_agreement: 'conf-soft', unresolved: 'conf-unresolved' };
+  const confLabel = { firm_commitment: 'Firm Commitment', soft_agreement: 'Soft Agreement', unresolved: 'Unresolved' };
+
+  document.getElementById('decisions-tab-label').textContent = `Decisions (${detail.decisions.length})`;
+  document.getElementById('decisions-list').innerHTML = detail.decisions.map(d => `
+    <div class="decision-item ${d.contradicts ? 'border-amber-300' : ''}" style="${d.contradicts ? 'border-color:#FCD34D;background:#FFFBEB;' : ''}">
+      <div class="decision-item-text">${d.text}</div>
+      <div class="decision-item-meta">
+        <span class="confidence-label ${confClass[d.confidence]}">${confLabel[d.confidence]}</span>
+        <span style="display:flex;align-items:center;gap:3px;"><i data-lucide="clock" style="width:11px;height:11px;"></i>${d.timestamp}</span>
+        <span style="display:flex;align-items:center;gap:3px;"><i data-lucide="user" style="width:11px;height:11px;"></i>${d.speaker}</span>
+        ${d.contradicts ? `<span class="badge badge-amber" style="font-size:11px;"><i data-lucide="alert-triangle" style="width:10px;height:10px;"></i>Contradiction</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  // Action Items
+  document.getElementById('actions-tab-label').textContent = `Action Items (${detail.action_items.length})`;
+  const statusBadge = { open:'badge-blue', overdue:'badge-red', done:'badge-green' };
+  document.getElementById('actions-list').innerHTML = detail.action_items.map(a => `
+    <div class="decision-item">
+      <div class="decision-item-text">${a.task}</div>
+      <div class="decision-item-meta">
+        <span style="display:flex;align-items:center;gap:3px;"><i data-lucide="user" style="width:11px;height:11px;"></i>${a.assignee}</span>
+        <span style="display:flex;align-items:center;gap:3px;"><i data-lucide="calendar" style="width:11px;height:11px;"></i>${new Date(a.deadline).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
+        <span class="badge ${statusBadge[a.status]}">${a.status.charAt(0).toUpperCase()+a.status.slice(1)}</span>
+      </div>
+    </div>
+  `).join('');
+
+  // Participants
+  const colors = ['#2563EB','#059669','#7C3AED','#D97706'];
+  document.getElementById('participants-list').innerHTML = meeting.participants.map((p, i) => {
+    const initials = p.split(' ').map(w=>w[0]).join('');
+    return `<div class="member-item">
+      <div class="member-avatar" style="background:${colors[i%colors.length]};width:30px;height:30px;font-size:12px;">${initials}</div>
+      <div class="member-info"><strong>${p}</strong><span>Participant</span></div>
+    </div>`;
+  }).join('');
+
+  // Tab switching
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+  }
+
+  lucide.createIcons();
+</script>
+</body>
+</html>

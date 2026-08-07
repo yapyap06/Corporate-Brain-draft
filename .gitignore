@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+!.env.example
+*.env.local
+
+# Uploads (audio recordings — large files)
+backend/uploads/
+uploads/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+neo4j_data/
+pg_data/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if added later)
+node_modules/
+npm-debug.log*
+.npm
+
+# Whisper model cache
+.cache/
+whisper_cache/
+
+# Docker volumes
+docker-volumes/

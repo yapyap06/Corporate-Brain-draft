@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "buildCommand": null,
+  "outputDirectory": "frontend",
+  "routes": [
+    {
+      "src": "/meetings",
+      "dest": "/meetings.html"
+    },
+    {
+      "src": "/meeting-detail",
+      "dest": "/meeting-detail.html"
+    },
+    {
+      "src": "/graph",
+      "dest": "/graph.html"
+    },
+    {
+      "src": "/chat",
+      "dest": "/chat.html"
+    },
+    {
+      "src": "/settings",
+      "dest": "/settings.html"
+    },
+    {
+      "src": "/room",
+      "dest": "/room.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ]
+}

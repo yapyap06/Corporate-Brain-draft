@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Corporate Brain — Dashboard</title>
+  <meta name="description" content="Corporate Brain: your organizational intelligence platform. Track commitments, surface AI flags, and explore your corporate memory graph." />
+  <link rel="stylesheet" href="index.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="mock-data.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">
+          <i data-lucide="brain" style="width:18px;height:18px;"></i>
+        </div>
+        <div class="sidebar-logo-text">
+          <strong>Corporate Brain</strong>
+          <span>Organizational Intelligence</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="index.html" class="nav-item active" id="nav-dashboard">
+          <i data-lucide="layout-dashboard" class="nav-icon"></i>
+          <span>Dashboard</span>
+        </a>
+        <a href="meetings.html" class="nav-item" id="nav-meetings">
+          <i data-lucide="video" class="nav-icon"></i>
+          <span>Meetings</span>
+        </a>
+        <a href="graph.html" class="nav-item" id="nav-graph">
+          <i data-lucide="git-fork" class="nav-icon"></i>
+          <span>Memory Graph</span>
+        </a>
+        <a href="chat.html" class="nav-item" id="nav-chat">
+          <i data-lucide="message-square" class="nav-icon"></i>
+          <span>Ask Brain</span>
+        </a>
+        <a href="settings.html" class="nav-item" id="nav-settings">
+          <i data-lucide="settings" class="nav-icon"></i>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="user-avatar">AC</div>
+          <div class="user-info">
+            <strong>Alex Chen</strong>
+            <span>alex.chen@acmecorp.com</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Dashboard</h1>
+          <p>Your personal accountability view — commitments, flags, and upcoming meetings</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm">
+            <i data-lucide="download" style="width:14px;height:14px;"></i>
+            Export
+          </button>
+          <button class="btn btn-primary btn-sm" id="refresh-btn">
+            <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Page Body -->
+      <div class="page-body">
+
+        <!-- Greeting Banner -->
+        <div class="greeting-banner">
+          <div>
+            <h2 id="greeting-text">Good morning, Alex.</h2>
+            <p>Here is your accountability summary for today — stay on top of your commitments.</p>
+          </div>
+          <div class="greeting-meta">
+            <div class="greeting-meta-item">
+              <strong id="open-count">—</strong>
+              <span>Open items</span>
+            </div>
+            <div class="greeting-meta-item">
+              <strong id="overdue-count" style="color:#DC2626;">—</strong>
+              <span>Overdue</span>
+            </div>
+            <div class="greeting-meta-item">
+              <strong id="flag-count" style="color:#D97706;">—</strong>
+              <span>AI Flags</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-icon blue">
+              <i data-lucide="check-square" style="width:20px;height:20px;"></i>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-commitments">—</div>
+              <div class="stat-label">Outstanding Commitments</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon red">
+              <i data-lucide="alert-triangle" style="width:20px;height:20px;"></i>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-flags">—</div>
+              <div class="stat-label">AI Flags Raised</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">
+              <i data-lucide="calendar" style="width:20px;height:20px;"></i>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-upcoming">—</div>
+              <div class="stat-label">Upcoming Meetings</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Two Column Layout -->
+        <div class="two-col">
+
+          <!-- Left: Commitments Table -->
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <h2>
+                  <i data-lucide="list-checks" style="width:16px;height:16px;color:#2563EB;"></i>
+                  My Commitments
+                </h2>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <select id="filter-status" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:6px;font-size:12.5px;color:#4B5563;background:#fff;">
+                    <option value="all">All Status</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="open">Open</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Task</th>
+                      <th>Source Meeting</th>
+                      <th>Deadline</th>
+                      <th>Priority</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="commitments-tbody">
+                    <!-- Rendered by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Flags + Upcoming -->
+          <div style="display:flex;flex-direction:column;gap:20px;">
+
+            <!-- AI Flags -->
+            <div class="card">
+              <div class="card-header">
+                <h2>
+                  <i data-lucide="shield-alert" style="width:16px;height:16px;color:#D97706;"></i>
+                  AI Flags — Relevant to You
+                </h2>
+              </div>
+              <div class="card-body" id="flags-container">
+                <!-- Rendered by JS -->
+              </div>
+            </div>
+
+            <!-- Upcoming Meetings -->
+            <div class="card">
+              <div class="card-header">
+                <h2>
+                  <i data-lucide="calendar-days" style="width:16px;height:16px;color:#059669;"></i>
+                  Upcoming Meetings
+                </h2>
+                <a href="meetings.html" class="btn btn-ghost btn-sm" style="font-size:12px;">View all</a>
+              </div>
+              <div class="card-body" id="upcoming-container" style="padding:12px 16px;">
+                <!-- Rendered by JS -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Init Lucide icons
+    lucide.createIcons();
+
+    // ── Greeting ──
+    const hour = new Date().getHours();
+    const greetWord = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    document.getElementById('greeting-text').textContent = `${greetWord}, Alex.`;
+
+    // ── Load Data ──
+    const data = mockData.dashboard;
+
+    const open    = data.action_items.filter(a => a.status === 'open').length;
+    const overdue = data.action_items.filter(a => a.status === 'overdue').length;
+    const total   = data.action_items.filter(a => a.status !== 'done').length;
+
+    document.getElementById('open-count').textContent    = open;
+    document.getElementById('overdue-count').textContent = overdue;
+    document.getElementById('flag-count').textContent    = data.flags.length;
+    document.getElementById('stat-commitments').textContent = total;
+    document.getElementById('stat-flags').textContent       = data.flags.length;
+    document.getElementById('stat-upcoming').textContent    = data.upcoming_meetings.length;
+
+    // ── Render Commitments Table ──
+    function renderCommitments(filter = 'all') {
+      const tbody = document.getElementById('commitments-tbody');
+      const items = filter === 'all' ? data.action_items : data.action_items.filter(a => a.status === filter);
+
+      const statusBadge = {
+        open:    '<span class="badge badge-blue">Open</span>',
+        overdue: '<span class="badge badge-red">Overdue</span>',
+        done:    '<span class="badge badge-green">Done</span>',
+      };
+      const priorityBadge = {
+        high:   '<span class="badge badge-red">High</span>',
+        medium: '<span class="badge badge-amber">Medium</span>',
+        low:    '<span class="badge badge-gray">Low</span>',
+      };
+
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:#9CA3AF;">No commitments for this filter.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(item => {
+        const d = new Date(item.deadline);
+        const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        return `<tr>
+          <td style="max-width:240px;">
+            <div style="font-size:13px;font-weight:500;color:#111827;line-height:1.4;">${item.task}</div>
+          </td>
+          <td>
+            <a href="meeting-detail.html?id=${item.meeting_id}" style="font-size:12.5px;color:#2563EB;white-space:nowrap;">${item.meeting_title}</a>
+          </td>
+          <td style="white-space:nowrap;font-size:12.5px;color:#4B5563;">${dateStr}</td>
+          <td>${priorityBadge[item.priority]}</td>
+          <td>${statusBadge[item.status]}</td>
+        </tr>`;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    renderCommitments();
+
+    document.getElementById('filter-status').addEventListener('change', e => {
+      renderCommitments(e.target.value);
+    });
+
+    // ── Render Flags ──
+    const flagsContainer = document.getElementById('flags-container');
+    flagsContainer.innerHTML = data.flags.map(flag => {
+      const cls = flag.severity === 'warning' ? 'warning' : 'info';
+      const iconName = flag.severity === 'warning' ? 'alert-triangle' : 'info';
+      const iconColor = flag.severity === 'warning' ? '#D97706' : '#2563EB';
+      return `<div class="flag-item ${cls}">
+        <div class="flag-icon">
+          <i data-lucide="${iconName}" style="width:16px;height:16px;color:${iconColor};"></i>
+        </div>
+        <div class="flag-text">
+          <strong>${flag.message}</strong>
+          <span>${flag.detail}</span>
+          <div style="margin-top:6px;">
+            <a href="meeting-detail.html?id=${flag.meeting_ref}" style="font-size:12px;color:#2563EB;">View ${flag.meeting_title}</a>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // ── Render Upcoming ──
+    const upcomingContainer = document.getElementById('upcoming-container');
+    upcomingContainer.innerHTML = data.upcoming_meetings.map((m, i) => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;${i < data.upcoming_meetings.length - 1 ? 'border-bottom:1px solid #F3F4F6;' : ''}">
+        <div style="width:40px;height:40px;border-radius:8px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="calendar" style="width:16px;height:16px;color:#2563EB;"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;color:#111827;">${m.title}</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">${new Date(m.date).toLocaleDateString('en-GB', {day:'numeric',month:'short'})} · ${m.time} · ${m.location}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:#4B5563;">
+          <i data-lucide="users" style="width:13px;height:13px;"></i>
+          ${m.participants}
+        </div>
+      </div>
+    `).join('');
+
+    lucide.createIcons();
+
+    // Refresh button
+    document.getElementById('refresh-btn').addEventListener('click', () => {
+      const icon = document.querySelector('#refresh-btn i');
+      icon.style.transform = 'rotate(360deg)';
+      icon.style.transition = 'transform 0.6s ease';
+      setTimeout(() => { icon.style.transform = ''; icon.style.transition = ''; }, 700);
+    });
+  </script>
+</body>
+</html>

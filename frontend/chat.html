@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ask Brain — Corporate Brain</title>
+  <meta name="description" content="Ask natural language questions about your organizational memory. Corporate Brain cites the source meeting for every answer." />
+  <link rel="stylesheet" href="index.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="mock-data.js"></script>
+  <style>
+    .chat-outer {
+      display: flex; flex-direction: column;
+      height: calc(100vh - 81px);
+      background: #F7F8FA;
+    }
+    .chat-top-bar {
+      background: #fff;
+      border-bottom: 1px solid #E5E7EB;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .chat-top-bar h2 { font-size: 15px; font-weight: 700; color: #111827; }
+    .chat-top-bar p  { font-size: 12px; color: #9CA3AF; margin-top: 1px; }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 20%;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    @media (max-width: 1100px) { .chat-messages { padding: 28px 8%; } }
+    .chat-msg.ai { align-self: flex-start; max-width: 85%; }
+    .chat-msg.user { align-self: flex-end; max-width: 70%; }
+    .ai-answer-text { font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+    .typing-indicator { display: flex; align-items: center; gap: 5px; padding: 4px 0; }
+    .typing-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #2563EB; opacity: 0.5;
+      animation: typing 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing { 0%,60%,100%{transform:translateY(0);opacity:0.4;} 30%{transform:translateY(-5px);opacity:1;} }
+    .chat-suggestions {
+      background: #fff;
+      border-bottom: 1px solid #E5E7EB;
+      padding: 10px 20%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+    }
+    @media (max-width: 1100px) { .chat-suggestions { padding: 10px 8%; } }
+    .chat-suggestions label { font-size: 12px; color: #9CA3AF; white-space: nowrap; }
+    .chat-input-area {
+      background: #fff;
+      border-top: 1px solid #E5E7EB;
+      padding: 14px 20%;
+    }
+    @media (max-width: 1100px) { .chat-input-area { padding: 14px 8%; } }
+    .chat-input-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: #F9FAFB;
+      border: 1px solid #D1D5DB;
+      border-radius: 12px;
+      padding: 10px 14px;
+      transition: border-color 150ms;
+    }
+    .chat-input-row:focus-within { border-color: #2563EB; background: #fff; }
+    .chat-input-row textarea {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-size: 14px;
+      resize: none;
+      max-height: 100px;
+      line-height: 1.5;
+      color: #111827;
+    }
+    .chat-input-row textarea::placeholder { color: #9CA3AF; }
+    .send-btn {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      border: none;
+      background: #2563EB;
+      color: white;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 150ms, transform 100ms;
+    }
+    .send-btn:hover { background: #1D4ED8; transform: scale(1.05); }
+    .send-btn:disabled { background: #D1D5DB; cursor: not-allowed; transform: none; }
+    .empty-chat {
+      text-align: center;
+      padding: 60px 20px;
+      color: #9CA3AF;
+    }
+    .empty-chat-icon {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #EFF6FF, #ECFDF5);
+      border: 1px solid #BFDBFE;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .empty-chat h3 { font-size: 17px; font-weight: 700; color: #374151; margin-bottom: 6px; }
+    .empty-chat p  { font-size: 13px; color: #9CA3AF; max-width: 340px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon"><i data-lucide="brain" style="width:18px;height:18px;"></i></div>
+      <div class="sidebar-logo-text"><strong>Corporate Brain</strong><span>Organizational Intelligence</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html"    class="nav-item"><i data-lucide="layout-dashboard" class="nav-icon"></i><span>Dashboard</span></a>
+      <a href="meetings.html" class="nav-item"><i data-lucide="video" class="nav-icon"></i><span>Meetings</span></a>
+      <a href="graph.html"    class="nav-item"><i data-lucide="git-fork" class="nav-icon"></i><span>Memory Graph</span></a>
+      <a href="chat.html"     class="nav-item active"><i data-lucide="message-square" class="nav-icon"></i><span>Ask Brain</span></a>
+      <a href="settings.html" class="nav-item"><i data-lucide="settings" class="nav-icon"></i><span>Settings</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar">AC</div>
+        <div class="user-info"><strong>Alex Chen</strong><span>alex.chen@acmecorp.com</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main (full height chat layout) -->
+  <main class="main-content" style="display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- Top bar -->
+    <div class="chat-top-bar">
+      <div>
+        <h2>Ask Brain</h2>
+        <p>Query your organizational memory — every answer is cited to the source meeting</p>
+      </div>
+      <button class="btn btn-outline btn-sm" id="clear-btn">
+        <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
+        Clear
+      </button>
+    </div>
+
+    <!-- Starter chips -->
+    <div class="chat-suggestions">
+      <label>Try asking:</label>
+      <button class="starter-chip" onclick="sendQuery('Why did we choose Provider X as our logistics vendor?')">Why did we choose Provider X?</button>
+      <button class="starter-chip" onclick="sendQuery('What were the key decisions on Project Alpha?')">Key decisions on Project Alpha</button>
+      <button class="starter-chip" onclick="sendQuery('Who is responsible for the budget review?')">Who owns the budget review?</button>
+      <button class="starter-chip" onclick="sendQuery('Are there any contradictions in our recent decisions?')">Show decision contradictions</button>
+    </div>
+
+    <!-- Messages -->
+    <div class="chat-messages" id="chat-messages">
+      <!-- Empty state -->
+      <div class="empty-chat" id="empty-state">
+        <div class="empty-chat-icon">
+          <i data-lucide="brain" style="width:28px;height:28px;color:#2563EB;"></i>
+        </div>
+        <h3>Ask anything about your organization</h3>
+        <p>Corporate Brain searches across all your meetings, decisions, and commitments to give you cited answers.</p>
+      </div>
+    </div>
+
+    <!-- Input area -->
+    <div class="chat-input-area">
+      <div class="chat-input-row">
+        <textarea
+          id="chat-input"
+          placeholder="Ask about any meeting, decision, or commitment..."
+          rows="1"
+          onkeydown="handleKeyDown(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendFromInput()" disabled>
+          <i data-lucide="send" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+      <div style="font-size:11.5px;color:#9CA3AF;margin-top:8px;text-align:center;">
+        Answers are generated from your organization's meeting data. Always verify critical decisions.
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  lucide.createIcons();
+
+  const chatInput  = document.getElementById('chat-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const chatMsgs   = document.getElementById('chat-messages');
+  const emptyState = document.getElementById('empty-state');
+
+  // Enable/disable send button
+  chatInput.addEventListener('input', () => {
+    sendBtn.disabled = chatInput.value.trim() === '';
+  });
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFromInput(); }
+  }
+
+  function sendFromInput() {
+    const q = chatInput.value.trim();
+    if (!q) return;
+    chatInput.value = '';
+    chatInput.style.height = 'auto';
+    sendBtn.disabled = true;
+    sendQuery(q);
+  }
+
+  function sendQuery(query) {
+    // Hide empty state
+    emptyState.style.display = 'none';
+
+    // Add user message
+    appendMessage('user', query);
+
+    // Add typing indicator
+    const typingId = 'typing-' + Date.now();
+    appendTyping(typingId);
+
+    // Simulate AI response delay
+    const delay = 1200 + Math.random() * 800;
+    setTimeout(() => {
+      removeTyping(typingId);
+
+      // Find matching response (or generic)
+      const sample = mockData.chatSamples.find(s =>
+        query.toLowerCase().includes('provider x') || query.toLowerCase().includes('vendor')
+          ? s.query.toLowerCase().includes('provider x')
+          : query.toLowerCase().includes('project alpha')
+            ? s.query.toLowerCase().includes('project alpha')
+            : false
+      ) || {
+        answer: `Based on your organization's meeting records, here is what Corporate Brain found:\n\nThis query was processed against ${mockData.meetings.filter(m => m.status === 'processed').length} processed meetings and ${mockData.graph.nodes.filter(n => n.type === 'decision').length} extracted decisions.\n\nFor a more specific answer, try uploading additional meeting recordings to expand the knowledge base. The system works best when more historical meetings are indexed.`,
+        citations: [
+          { meeting_id: 'm_001', meeting_title: 'Q2 Business Review', decision_id: 'd_001', excerpt: 'Switch primary logistics vendor from Provider Y to Provider X' }
+        ]
+      };
+
+      appendAIMessage(sample.answer, sample.citations);
+      chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    }, delay);
+  }
+
+  function appendMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = `chat-msg ${role}`;
+    div.innerHTML = `<div class="chat-bubble">${escapeHtml(text)}</div>`;
+    chatMsgs.appendChild(div);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+  }
+
+  function appendTyping(id) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg ai';
+    div.id = id;
+    div.innerHTML = `
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#2563EB,#059669);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i data-lucide="brain" style="width:15px;height:15px;color:white;"></i>
+      </div>
+      <div class="chat-bubble">
+        <div class="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>`;
+    chatMsgs.appendChild(div);
+    lucide.createIcons();
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+  }
+
+  function removeTyping(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+
+  function appendAIMessage(answer, citations) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg ai';
+
+    const formattedAnswer = answer
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n(\d+)\. /g, '<br>$1. ');
+
+    const citationHtml = citations.map(c => `
+      <a href="meeting-detail.html?id=${c.meeting_id}" class="citation-chip" title="${c.excerpt}">
+        <i data-lucide="external-link" style="width:11px;height:11px;"></i>
+        ${c.meeting_title}
+      </a>
+    `).join('');
+
+    div.innerHTML = `
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#2563EB,#059669);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+        <i data-lucide="brain" style="width:15px;height:15px;color:white;"></i>
+      </div>
+      <div>
+        <div class="chat-bubble">
+          <div class="ai-answer-text">${formattedAnswer}</div>
+          <div class="citation-chips" style="margin-top:12px;">
+            <span style="font-size:11.5px;color:#9CA3AF;align-self:center;">Sources:</span>
+            ${citationHtml}
+          </div>
+        </div>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:4px;padding-left:4px;">
+          Corporate Brain · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+        </div>
+      </div>`;
+    chatMsgs.appendChild(div);
+    lucide.createIcons();
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(text));
+    return div.innerHTML;
+  }
+
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    chatMsgs.innerHTML = '';
+    chatMsgs.appendChild(emptyState);
+    emptyState.style.display = 'block';
+  });
+
+  lucide.createIcons();
+</script>
+</body>
+</html>

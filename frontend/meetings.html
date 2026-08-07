@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meetings — Corporate Brain</title>
+  <meta name="description" content="View and manage all processed meeting recordings. Upload new meetings to extract decisions and action items." />
+  <link rel="stylesheet" href="index.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="mock-data.js"></script>
+  <style>
+    .meetings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .status-dot.processed { background: #059669; }
+    .status-dot.processing { background: #D97706; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">
+        <i data-lucide="brain" style="width:18px;height:18px;"></i>
+      </div>
+      <div class="sidebar-logo-text">
+        <strong>Corporate Brain</strong>
+        <span>Organizational Intelligence</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html"    class="nav-item"><i data-lucide="layout-dashboard" class="nav-icon"></i><span>Dashboard</span></a>
+      <a href="meetings.html" class="nav-item active"><i data-lucide="video" class="nav-icon"></i><span>Meetings</span></a>
+      <a href="graph.html"    class="nav-item"><i data-lucide="git-fork" class="nav-icon"></i><span>Memory Graph</span></a>
+      <a href="chat.html"     class="nav-item"><i data-lucide="message-square" class="nav-icon"></i><span>Ask Brain</span></a>
+      <a href="settings.html" class="nav-item"><i data-lucide="settings" class="nav-icon"></i><span>Settings</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar">AC</div>
+        <div class="user-info"><strong>Alex Chen</strong><span>alex.chen@acmecorp.com</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="page-header">
+      <div class="page-title">
+        <h1>Meetings</h1>
+        <p>All processed meeting recordings — Coco records, transcribes, and extracts decisions automatically</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" id="upload-btn">
+          <i data-lucide="upload-cloud" style="width:15px;height:15px;"></i>
+          Upload File
+        </button>
+        <button class="btn btn-primary" id="new-meeting-btn">
+          <i data-lucide="bot" style="width:15px;height:15px;"></i>
+          New Meeting with Coco
+        </button>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Coco Banner -->
+      <div style="background:linear-gradient(135deg,#F0FDFA 0%,#EFF6FF 100%);border:1px solid #99F6E4;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;">
+        <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#0D9488,#2563EB);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="bot" style="width:18px;height:18px;color:white;"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:13.5px;font-weight:600;color:#134E4A;">Coco is your AI meeting agent</div>
+          <div style="font-size:12.5px;color:#0F766E;margin-top:2px;">Click <strong>New Meeting with Coco</strong> to start a session — Coco joins as a participant, records the meeting, and automatically extracts all decisions, action items, and contradictions.</div>
+        </div>
+        <a href="room.html?id=demo-room" class="btn btn-sm" style="background:#0D9488;color:white;flex-shrink:0;">
+          <i data-lucide="play" style="width:13px;height:13px;"></i>
+          Try Demo Room
+        </a>
+      </div>
+
+      <!-- Upload Zone (hidden by default) -->
+      <div class="upload-zone" id="upload-zone" style="display:none;" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleDrop(event)">
+        <div class="upload-zone-icon">
+          <i data-lucide="cloud-upload" style="width:40px;height:40px;"></i>
+        </div>
+        <h3>Drop your audio or video file here</h3>
+        <p>Supports MP3, MP4, WAV, M4A — up to 500 MB</p>
+        <div style="margin-top:14px;">
+          <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+            <i data-lucide="folder-open" style="width:14px;height:14px;"></i>
+            Browse Files
+          </button>
+          <button class="btn btn-ghost" style="margin-left:8px;" onclick="toggleUpload()">Cancel</button>
+        </div>
+        <input type="file" id="file-input" accept=".mp3,.mp4,.wav,.m4a" style="display:none;" onchange="handleFileSelect(event)" />
+        <!-- Upload progress (shown after file selected) -->
+        <div id="upload-progress" style="display:none;margin-top:20px;width:100%;max-width:380px;margin-left:auto;margin-right:auto;">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#4B5563;margin-bottom:6px;">
+            <span id="upload-filename">filename.mp3</span>
+            <span id="upload-pct">0%</span>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar" id="upload-bar" style="width:0%;"></div>
+          </div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:6px;" id="upload-status-text">Uploading...</div>
+        </div>
+      </div>
+
+      <!-- Search + Filter Bar -->
+      <div class="filter-bar" style="margin-bottom:20px;">
+        <div style="position:relative;flex:1;max-width:320px;">
+          <i data-lucide="search" style="width:14px;height:14px;position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#9CA3AF;pointer-events:none;"></i>
+          <input type="text" id="search-input" placeholder="Search meetings..." style="padding-left:32px;width:100%;" oninput="renderMeetings()" />
+        </div>
+        <select id="filter-status" onchange="renderMeetings()" style="padding:7px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;color:#111827;background:#fff;">
+          <option value="all">All Status</option>
+          <option value="processed">Processed</option>
+          <option value="processing">Processing</option>
+        </select>
+        <span class="filter-label" id="meeting-count" style="margin-left:auto;font-size:13px;color:#6B7280;"></span>
+      </div>
+
+      <!-- Meetings Grid -->
+      <div class="meetings-grid" id="meetings-grid">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  lucide.createIcons();
+
+  // Toggle upload zone
+  function toggleUpload() {
+    const zone = document.getElementById('upload-zone');
+    zone.style.display = zone.style.display === 'none' ? 'block' : 'none';
+    lucide.createIcons();
+  }
+  document.getElementById('upload-btn').addEventListener('click', toggleUpload);
+
+  // File select / drag-drop simulation
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('upload-zone').classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) simulateUpload(file.name);
+  }
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) simulateUpload(file.name);
+  }
+
+  function simulateUpload(name) {
+    const progress = document.getElementById('upload-progress');
+    progress.style.display = 'block';
+    document.getElementById('upload-filename').textContent = name;
+    document.getElementById('upload-status-text').textContent = 'Uploading...';
+    let pct = 0;
+    const interval = setInterval(() => {
+      pct += Math.random() * 15;
+      if (pct >= 100) {
+        pct = 100;
+        clearInterval(interval);
+        document.getElementById('upload-status-text').textContent = 'Processing with AI — extracting decisions and commitments...';
+      }
+      document.getElementById('upload-bar').style.width = pct + '%';
+      document.getElementById('upload-pct').textContent = Math.round(pct) + '%';
+    }, 300);
+  }
+
+  // Render meetings
+  function renderMeetings() {
+    const grid = document.getElementById('meetings-grid');
+    const q = document.getElementById('search-input').value.toLowerCase();
+    const statusFilter = document.getElementById('filter-status').value;
+
+    let meetings = mockData.meetings;
+    if (q) meetings = meetings.filter(m => m.title.toLowerCase().includes(q));
+    if (statusFilter !== 'all') meetings = meetings.filter(m => m.status === statusFilter);
+
+    document.getElementById('meeting-count').textContent = `${meetings.length} meeting${meetings.length !== 1 ? 's' : ''}`;
+
+    if (meetings.length === 0) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+        <i data-lucide="video-off" style="width:40px;height:40px;display:block;margin:0 auto 12px;"></i>
+        <h3>No meetings found</h3>
+        <p>Try a different search term or upload a new meeting.</p>
+      </div>`;
+      lucide.createIcons();
+      return;
+    }
+
+    grid.innerHTML = meetings.map(m => {
+      const date = new Date(m.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const initials = arr => arr.map(n => n.split(' ').map(w => w[0]).join('').slice(0,2));
+      const isProcessing = m.status === 'processing';
+
+      const avatarColors = ['#2563EB','#059669','#7C3AED','#D97706','#DC2626'];
+      const avatarsHtml = m.participants.slice(0,4).map((p, i) =>
+        `<div class="avatar-sm" style="background:${avatarColors[i % avatarColors.length]}" title="${p}">${initials([p])[0]}</div>`
+      ).join('') + (m.participants.length > 4 ? `<div class="avatar-sm" style="background:#9CA3AF;">+${m.participants.length - 4}</div>` : '');
+
+      return `<a class="meeting-card" href="${isProcessing ? '#' : 'meeting-detail.html?id=' + m.id}" ${isProcessing ? 'onclick="return false;"' : ''}>
+        <div class="meeting-card-top">
+          <div>
+            <h3>${m.title}</h3>
+            <div class="meeting-card-meta" style="margin-top:4px;">
+              <span><i data-lucide="calendar" style="width:12px;height:12px;"></i> ${date}</span>
+              <span><i data-lucide="clock" style="width:12px;height:12px;"></i> ${m.duration}</span>
+            </div>
+          </div>
+          ${isProcessing ? `<span class="badge badge-amber"><span class="status-dot processing"></span>Processing</span>` : `<span class="badge badge-green"><span class="status-dot processed"></span>Processed</span>`}
+        </div>
+        ${isProcessing ? `
+          <div style="padding:6px 0;">
+            <div style="font-size:12px;color:#9CA3AF;margin-bottom:6px;">Extracting decisions and commitments with AI...</div>
+            <div class="progress-bar-wrap"><div class="progress-bar" style="width:60%;background:#D97706;"></div></div>
+          </div>
+        ` : `
+          <div class="meeting-card-footer">
+            <span class="badge badge-green" style="font-size:11.5px;">
+              <i data-lucide="check-circle" style="width:11px;height:11px;"></i>
+              ${m.decisions_count} decisions
+            </span>
+            ${m.flags_count > 0 ? `<span class="badge badge-amber" style="font-size:11.5px;">
+              <i data-lucide="alert-triangle" style="width:11px;height:11px;"></i>
+              ${m.flags_count} flags
+            </span>` : ''}
+            <span class="badge badge-blue" style="font-size:11.5px;">
+              <i data-lucide="clipboard-list" style="width:11px;height:11px;"></i>
+              ${m.action_items_count} action items
+            </span>
+          </div>
+        `}
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="avatars">${avatarsHtml}</div>
+          <span style="font-size:12px;color:#9CA3AF;">${m.participants.length} participant${m.participants.length !== 1 ? 's' : ''}</span>
+        </div>
+      </a>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  renderMeetings();
+
+  // ── New Meeting Modal ──
+  const API_BASE = 'http://localhost:8000';
+
+  document.getElementById('new-meeting-btn').addEventListener('click', () => {
+    const title = prompt('Meeting title (e.g. "Q3 Planning Kickoff"):');
+    if (!title) return;
+    createCocoRoom(title.trim());
+  });
+
+  async function createCocoRoom(title) {
+    const btn = document.getElementById('new-meeting-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Creating...';
+    lucide.createIcons();
+
+    try {
+      const res = await fetch(`${API_BASE}/api/rooms/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, date: new Date().toISOString() })
+      });
+
+      if (!res.ok) throw new Error('API error');
+      const room = await res.json();
+      window.location.href = `room.html?id=${room.id}&meeting_title=${encodeURIComponent(title)}`;
+
+    } catch (err) {
+      console.warn('Backend not available, opening demo room:', err);
+      // Demo mode — open room with a demo ID
+      const demoId = 'demo_' + Date.now().toString(36);
+      window.location.href = `room.html?id=${demoId}&meeting_title=${encodeURIComponent(title)}`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="bot" style="width:15px;height:15px;"></i> New Meeting with Coco';
+      lucide.createIcons();
+    }
+  }
+
+  // Refresh meetings list every 8s to show newly processed meetings
+  setInterval(() => {
+    fetch(`${API_BASE}/api/meetings`)
+      .then(r => r.json())
+      .then(meetings => {
+        // Merge real API data into mock data for display
+        meetings.forEach(m => {
+          const exists = mockData.meetings.find(x => x.id === m.id);
+          if (!exists) mockData.meetings.unshift(m);
+        });
+        renderMeetings();
+      })
+      .catch(() => {/* backend not running — keep mock data */});
+  }, 8000);
+</script>
+</body>
+</html>
