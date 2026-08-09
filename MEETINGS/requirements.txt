@@ -1,0 +1,23 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+pydantic==2.8.2
+python-dotenv==1.0.1
+
+# Transcription (Whisper)
+openai-whisper==20231117
+torch==2.4.0
+torchaudio==2.4.0
+
+# Speaker Diarization
+pyannote.audio==3.1.1
+huggingface_hub>=0.23.0
+
+# AI Extraction
+google-genai>=0.8.0
+
+# Video frame extraction (for Gemini Vision nameplate reading)
+opencv-python-headless==4.10.0.84
+
+# Utilities
+aiofiles==24.1.0

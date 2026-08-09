@@ -54,3 +54,11 @@ whisper_cache/
 
 # Docker volumes
 docker-volumes/
+
+# MEETINGS module ignore
+MEETINGS/.env
+MEETINGS/uploads/
+MEETINGS/frames/
+MEETINGS/results/*.json
+test.wav
+
