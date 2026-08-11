@@ -19,6 +19,7 @@ import mimetypes
 from pathlib import Path
 from contextlib import asynccontextmanager
 
+from pydantic import BaseModel
 from fastapi import (
     FastAPI, UploadFile, File, HTTPException,
     BackgroundTasks, Request
@@ -246,6 +247,17 @@ async def delete_meeting_endpoint(job_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Meeting '{job_id}' not found")
     return {"status": "deleted", "job_id": job_id}
+
+
+
+
+@app.get("/ask-coco", response_class=HTMLResponse, include_in_schema=False)
+async def ask_coco_page():
+    """Serve the Ask Coco UI page."""
+    ask_coco_index = Path(__file__).parent.parent / "ASK COCO" / "index.html"
+    if ask_coco_index.exists():
+        return HTMLResponse(content=ask_coco_index.read_text(encoding="utf-8"))
+    return HTMLResponse("<h2>index.html not found in ASK COCO folder.</h2>", status_code=404)
 
 
 # ── Input validation helper ───────────────────────────────────────────

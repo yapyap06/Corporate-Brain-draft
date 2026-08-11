@@ -13,7 +13,9 @@ load_dotenv(dotenv_path=_env_path)
 
 class Settings:
     # ── AI Keys ──────────────────────────────────────────────────────────
-    GEMINI_API_KEY: str  = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_API_KEY: str  = os.getenv("GEMINI_API_KEY", "").strip().lstrip("-")
+    AGNES_API_KEY:  str  = os.getenv("AGNES_API_KEY", "")
+    AGNES_BASE_URL: str  = os.getenv("AGNES_BASE_URL", "https://apihub.agnes-ai.com/v1")
     HF_TOKEN:       str  = os.getenv("HF_TOKEN", "")         # HuggingFace for PyAnnote
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "")
 

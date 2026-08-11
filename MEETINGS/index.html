@@ -248,6 +248,9 @@
       <div class="nav-item" id="nav-upload" onclick="showView('upload')">
         <i data-lucide="upload-cloud" class="nav-icon"></i><span>Upload Meeting</span>
       </div>
+      <a href="/ask-coco" class="nav-item" id="nav-ask-coco">
+        <i data-lucide="message-square" class="nav-icon"></i><span>Ask Coco</span>
+      </a>
       <div class="nav-item" id="nav-detail" onclick="if(currentJobId) showMeetingDetail(currentJobId)" style="display:none;">
         <i data-lucide="file-text" class="nav-icon"></i><span>Meeting Detail</span>
       </div>
@@ -324,6 +327,7 @@
           <div id="pipeline-steps">
             <!-- Rendered by JS -->
           </div>
+          <div id="pipeline-action-btn" style="margin-top:20px;display:none;text-align:center;"></div>
         </div>
 
         <!-- Info box -->
@@ -576,6 +580,12 @@
   async function startUpload() {
     if (!selectedFile) return;
 
+    // Show pipeline overlay immediately when upload starts
+    initPipelineUI();
+    document.getElementById('pipeline-overlay').classList.add('active');
+    document.getElementById('pipeline-pct').textContent = '0%';
+    document.getElementById('pipeline-message').textContent = 'Uploading file to server...';
+
     const btn = document.getElementById('upload-btn');
     btn.disabled = true;
     btn.innerHTML = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Uploading...';
@@ -594,14 +604,13 @@
       currentJobId = data.job_id;
       document.getElementById('file-info').style.display = 'none';
 
-      // Show pipeline and start polling
-      initPipelineUI();
-      document.getElementById('pipeline-overlay').classList.add('active');
+      // Start polling
       startPolling(data.job_id);
       showToast('Upload successful — Coco is processing your meeting', 'success');
 
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
+      document.getElementById('pipeline-overlay').classList.remove('active');
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="upload-cloud" style="width:14px;height:14px;"></i> Upload & Process';
       lucide.createIcons();
@@ -611,6 +620,8 @@
   // ── Pipeline UI ───────────────────────────────────────────────────────
   function initPipelineUI() {
     stepStartTimes = {};
+    const btnDiv = document.getElementById('pipeline-action-btn');
+    if (btnDiv) btnDiv.style.display = 'none';
     const container = document.getElementById('pipeline-steps');
     container.innerHTML = PIPELINE_STEPS.filter(s => s.key !== 'queued').map(s => `
       <div class="pipeline-step" id="pstep-${s.key}">
@@ -668,13 +679,42 @@
 
         if (d.step === 'done') {
           clearInterval(pollTimer);
-          showToast('Meeting processed! Opening results...', 'success');
-          setTimeout(() => showMeetingDetail(jobId), 1200);
+          showToast('Meeting processed successfully!', 'success');
+          const btnDiv = document.getElementById('pipeline-action-btn');
+          if (btnDiv) {
+            btnDiv.style.display = 'block';
+            btnDiv.innerHTML = `
+              <button class="btn btn-primary" style="padding:10px 24px;font-size:14px;" onclick="showMeetingDetail('${jobId}')">
+                <i data-lucide="arrow-right" style="width:16px;height:16px;"></i>
+                View Meeting Results &amp; Transcript
+              </button>
+            `;
+            lucide.createIcons();
+          }
         } else if (d.step === 'error') {
           clearInterval(pollTimer);
-          showToast(`Processing error: ${d.error || 'Unknown error'}`, 'error');
-          document.getElementById('pipeline-pct').textContent = 'Error';
-          document.getElementById('pipeline-message').textContent = d.error || 'Processing failed';
+          showToast(`Processing stopped: API Error (429 / 404)`, 'error');
+          document.getElementById('pipeline-pct').textContent = 'Failed';
+          document.getElementById('pipeline-message').textContent = d.error || 'API Error Exceeded';
+          const btnDiv = document.getElementById('pipeline-action-btn');
+          if (btnDiv) {
+            btnDiv.style.display = 'block';
+            btnDiv.innerHTML = `
+              <div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:12px;padding:16px 18px;color:#991B1B;font-size:13.5px;text-align:left;line-height:1.5;margin-bottom:14px;box-shadow:0 2px 6px rgba(220,38,38,0.08);">
+                <div style="font-weight:700;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:8px;color:#DC2626;">
+                  <i data-lucide="alert-triangle" style="width:18px;height:18px;"></i> Pipeline Halted: API Error Encountered
+                </div>
+                ${escHtml(d.error || 'Gemini API Error (429 Rate Limit / 404 Not Found)')}
+                <div style="margin-top:8px;font-size:12.5px;color:#7F1D1D;font-weight:500;">
+                  👉 <strong>What to do:</strong> Open <code>MEETINGS/.env</code>, update <code>GEMINI_API_KEY</code> with a new key from another Google Account, save, and restart your server.
+                </div>
+              </div>
+              <button class="btn btn-outline" onclick="showView('upload')">
+                <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Try Again with New API Key
+              </button>
+            `;
+            lucide.createIcons();
+          }
         }
       } catch {/* keep polling */}
     }, 1500);

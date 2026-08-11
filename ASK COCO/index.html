@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ask Coco — Corporate Brain</title>
+  <meta name="description" content="Ask natural language questions about your organizational meeting memory. Coco cites the source meeting, speaker, and timestamp for every answer." />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #F8FAFC;
+      color: #111827;
+      min-height: 100vh;
+    }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    /* ── Layout ── */
+    .app-shell    { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar      { width: 230px; background: #fff; border-right: 1px solid #E5E7EB; display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; }
+    .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #F8FAFC; }
+
+    /* ── Sidebar ── */
+    .sidebar-logo { padding: 18px 16px; border-bottom: 1px solid #F3F4F6; display: flex; align-items: center; gap: 10px; }
+    .sidebar-logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #2563EB, #7C3AED); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
+    .sidebar-logo-text strong { font-size: 14px; font-weight: 700; color: #111827; display: block; }
+    .sidebar-logo-text span   { font-size: 11px; color: #9CA3AF; }
+    .sidebar-nav  { flex: 1; padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; }
+    .nav-item     { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: #4B5563; text-decoration: none; transition: all 150ms; cursor: pointer; }
+    .nav-item:hover  { background: #F0F4FF; color: #2563EB; }
+    .nav-item.active { background: #EEF2FF; color: #2563EB; font-weight: 600; }
+    .nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+    /* ── Badges & Buttons ── */
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+    .badge-blue   { background: #DBEAFE; color: #1D4ED8; }
+    .badge-green  { background: #D1FAE5; color: #065F46; }
+    .badge-amber  { background: #FEF3C7; color: #92400E; }
+    .badge-gray   { background: #F3F4F6; color: #6B7280; }
+    .badge-teal   { background: #CCFBF1; color: #0F766E; }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 150ms; text-decoration: none; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-outline  { background: white; color: #374151; border: 1px solid #D1D5DB; }
+    .btn-outline:hover:not(:disabled) { background: #F9FAFB; border-color: #9CA3AF; }
+
+    /* ── Chat Header Bar ── */
+    .chat-top-bar {
+      background: #fff;
+      border-bottom: 1px solid #E5E7EB;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .chat-top-bar h1 { font-size: 18px; font-weight: 700; color: #111827; display: flex; align-items: center; gap: 8px; }
+    .chat-top-bar p  { font-size: 12.5px; color: #6B7280; margin-top: 2px; }
+
+    /* ── Starter Chips ── */
+    .chat-suggestions {
+      background: #fff;
+      border-bottom: 1px solid #F3F4F6;
+      padding: 10px 28px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .chat-suggestions label { font-size: 12px; font-weight: 600; color: #9CA3AF; white-space: nowrap; }
+    .starter-chip {
+      background: #F3F4F6;
+      border: 1px solid #E5E7EB;
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 12.5px;
+      color: #374151;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 150ms;
+    }
+    .starter-chip:hover {
+      background: #EFF6FF;
+      border-color: #93C5FD;
+      color: #2563EB;
+      transform: translateY(-1px);
+    }
+
+    /* ── Chat Messages Container ── */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 18%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    @media (max-width: 1100px) { .chat-messages { padding: 24px 6%; } }
+
+    /* Empty state */
+    .empty-chat {
+      text-align: center;
+      padding: 80px 20px;
+      margin: auto;
+    }
+    .empty-chat-icon {
+      width: 64px; height: 64px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #EEF2FF, #E0E7FF);
+      border: 1px solid #C7D2FE;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 18px;
+      color: #4F46E5;
+      box-shadow: 0 4px 12px rgba(79,70,229,0.12);
+    }
+    .empty-chat h2 { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+    .empty-chat p  { font-size: 13.5px; color: #6B7280; max-width: 420px; margin: 0 auto; line-height: 1.5; }
+
+    /* Chat Bubbles */
+    .chat-msg { display: flex; gap: 12px; max-width: 88%; animation: fadeIn 200ms ease-out; }
+    .chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .chat-msg.ai   { align-self: flex-start; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .chat-avatar {
+      width: 34px; height: 34px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 12px; font-weight: 700;
+    }
+    .chat-msg.user .chat-avatar { background: #2563EB; color: white; }
+    .chat-msg.ai .chat-avatar   { background: linear-gradient(135deg, #0D9488, #2563EB); color: white; }
+
+    .chat-bubble {
+      background: #fff;
+      border: 1px solid #E5E7EB;
+      border-radius: 14px;
+      padding: 14px 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      font-size: 14px;
+      line-height: 1.6;
+      color: #1F2937;
+    }
+    .chat-msg.user .chat-bubble {
+      background: #2563EB;
+      color: white;
+      border: none;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-msg.ai .chat-bubble {
+      border-bottom-left-radius: 4px;
+    }
+
+    /* Citation Cards */
+    .citations-header {
+      font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280;
+      margin-top: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .citation-card {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 9px;
+      padding: 10px 12px;
+      margin-top: 6px;
+      font-size: 12.5px;
+      transition: all 150ms;
+    }
+    .citation-card:hover { border-color: #93C5FD; background: #F0F4FF; }
+    .citation-title { font-weight: 600; color: #1E40AF; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .citation-meta  { display: flex; align-items: center; gap: 10px; color: #6B7280; font-size: 11.5px; margin-bottom: 4px; }
+    .citation-excerpt { color: #475569; font-style: italic; border-left: 2px solid #CBD5E1; padding-left: 8px; margin-top: 4px; }
+
+    /* Typing Dots */
+    .typing-indicator { display: flex; align-items: center; gap: 6px; padding: 4px 6px; }
+    .typing-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #2563EB; opacity: 0.4;
+      animation: typing 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing { 0%,60%,100%{transform:translateY(0);opacity:0.3;} 30%{transform:translateY(-6px);opacity:1;} }
+
+    /* ── Chat Input Area ── */
+    .chat-input-area {
+      background: #fff;
+      border-top: 1px solid #E5E7EB;
+      padding: 16px 18%;
+      flex-shrink: 0;
+    }
+    @media (max-width: 1100px) { .chat-input-area { padding: 14px 6%; } }
+
+    .chat-input-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: #F9FAFB;
+      border: 1.5px solid #D1D5DB;
+      border-radius: 12px;
+      padding: 10px 14px;
+      transition: all 150ms;
+    }
+    .chat-input-row:focus-within { border-color: #2563EB; background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .chat-input-row textarea {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      max-height: 120px;
+      line-height: 1.5;
+      color: #111827;
+    }
+    .chat-input-row textarea::placeholder { color: #9CA3AF; }
+    .send-btn {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      border: none;
+      background: #2563EB;
+      color: white;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 150ms;
+    }
+    .send-btn:hover:not(:disabled) { background: #1D4ED8; transform: scale(1.05); }
+    .send-btn:disabled { background: #E5E7EB; color: #9CA3AF; cursor: not-allowed; transform: none; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon"><i data-lucide="sparkles" style="width:18px;height:18px;"></i></div>
+      <div class="sidebar-logo-text"><strong>Corporate Brain</strong><span>Ask Coco Module</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item">
+        <i data-lucide="video" class="nav-icon"></i><span>Meetings Dashboard</span>
+      </a>
+      <div class="nav-item active">
+        <i data-lucide="message-square" class="nav-icon"></i><span>Ask Coco</span>
+      </div>
+    </nav>
+    <div style="padding:16px;border-top:1px solid #F3F4F6;">
+      <div style="font-size:12px;color:#9CA3AF;margin-bottom:4px;">Backend Engine</div>
+      <div id="backend-status" class="badge badge-green" style="font-size:11px;">Gemini 2.5 Active</div>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content">
+
+    <!-- Top Bar -->
+    <div class="chat-top-bar">
+      <div>
+        <h1><i data-lucide="bot" style="width:22px;height:22px;color:#2563EB;"></i> Ask Coco</h1>
+        <p>Query your organization's meeting memory — every answer is cited to the exact source meeting and speaker</p>
+      </div>
+      <button class="btn btn-outline" onclick="clearChat()">
+        <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Clear Chat
+      </button>
+    </div>
+
+    <!-- Starter Chips -->
+    <div class="chat-suggestions">
+      <label>Try asking:</label>
+      <button class="starter-chip" onclick="askQuestion('Why did we choose Provider X as our vendor?')">Why did we choose Provider X?</button>
+      <button class="starter-chip" onclick="askQuestion('What were the key decisions on Project Alpha?')">Key decisions on Project Alpha</button>
+      <button class="starter-chip" onclick="askQuestion('Who owns the budget review?')">Who owns the budget review?</button>
+      <button class="starter-chip" onclick="askQuestion('What did Samuel say about certificates?')">What did Samuel say about certificates?</button>
+      <button class="starter-chip" onclick="askQuestion('Show decision contradictions')">Show decision contradictions</button>
+    </div>
+
+    <!-- Messages Container -->
+    <div class="chat-messages" id="chat-messages">
+      <!-- Empty State -->
+      <div class="empty-chat" id="empty-state">
+        <div class="empty-chat-icon">
+          <i data-lucide="sparkles" style="width:32px;height:32px;"></i>
+        </div>
+        <h2>Ask Coco Anything</h2>
+        <p>Ask natural language questions across all your processed meetings, transcripts, decisions, and action items.</p>
+      </div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="chat-input-area">
+      <div class="chat-input-row">
+        <textarea
+          id="chat-input"
+          placeholder="Ask Coco about any meeting, decision, or speaker..."
+          rows="1"
+          onkeydown="handleKeyDown(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendFromInput()" disabled>
+          <i data-lucide="send" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+      <div style="font-size:11.5px;color:#9CA3AF;margin-top:8px;text-align:center;">
+        Answers are synthesized by Groq llama-3.3-70b from your organization's meeting records. Always verify critical decisions.
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  const API_BASE = 'http://localhost:8200';
+  const chatInput  = document.getElementById('chat-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const chatMsgs   = document.getElementById('chat-messages');
+  const emptyState = document.getElementById('empty-state');
+
+  // Input enable/disable & auto-resize
+  chatInput.addEventListener('input', () => {
+    sendBtn.disabled = chatInput.value.trim() === '';
+  });
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendFromInput();
+    }
+  }
+
+  function sendFromInput() {
+    const query = chatInput.value.trim();
+    if (!query) return;
+    chatInput.value = '';
+    chatInput.style.height = 'auto';
+    sendBtn.disabled = true;
+    askQuestion(query);
+  }
+
+  async function askQuestion(query) {
+    emptyState.style.display = 'none';
+
+    // 1. Render User Message
+    appendMessage('user', query);
+
+    // 2. Render Typing Indicator
+    const typingId = 'typing-' + Date.now();
+    appendTyping(typingId);
+
+    // 3. Call backend or fallback
+    try {
+      const resp = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query })
+      });
+
+      removeTyping(typingId);
+
+      if (resp.ok) {
+        const data = await resp.json();
+        appendMessage('ai', data.answer, data.citations || []);
+      } else {
+        throw new Error('API Error');
+      }
+    } catch (err) {
+      removeTyping(typingId);
+      // Fallback local simulation for demo/visualization
+      const fallback = getFallbackAnswer(query);
+      appendMessage('ai', fallback.answer, fallback.citations);
+    }
+  }
+
+  function appendMessage(role, text, citations = []) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `chat-msg ${role}`;
+
+    const avatarHtml = role === 'user'
+      ? `<div class="chat-avatar">YOU</div>`
+      : `<div class="chat-avatar"><i data-lucide="sparkles" style="width:16px;height:16px;"></i></div>`;
+
+    let citationsHtml = '';
+    if (role === 'ai' && citations && citations.length > 0) {
+      citationsHtml = `
+        <div class="citations-header">
+          <i data-lucide="link" style="width:12px;height:12px;color:#2563EB;"></i> Sources & Citations (${citations.length})
+        </div>
+        ${citations.map(c => `
+          <div class="citation-card">
+            <div class="citation-title">
+              <i data-lucide="file-video" style="width:13px;height:13px;color:#2563EB;"></i>
+              ${escHtml(c.filename || 'Meeting File')}
+            </div>
+            <div class="citation-meta">
+              <span><i data-lucide="user" style="width:11px;height:11px;"></i> ${escHtml(c.speaker || 'Speaker')}</span>
+              <span class="badge badge-blue" style="font-size:10.5px;"><i data-lucide="clock" style="width:10px;height:10px;"></i> ${c.timestamp || '00:00:00'}</span>
+            </div>
+            ${c.excerpt ? `<div class="citation-excerpt">"${escHtml(c.excerpt)}"</div>` : ''}
+          </div>
+        `).join('')}
+      `;
+    }
+
+    msgDiv.innerHTML = `
+      ${avatarHtml}
+      <div class="chat-bubble">
+        <div>${escHtml(text).replace(/\n/g, '<br/>')}</div>
+        ${citationsHtml}
+      </div>
+    `;
+
+    chatMsgs.appendChild(msgDiv);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    lucide.createIcons();
+  }
+
+  function appendTyping(id) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-msg ai';
+    msgDiv.id = id;
+    msgDiv.innerHTML = `
+      <div class="chat-avatar"><i data-lucide="sparkles" style="width:16px;height:16px;"></i></div>
+      <div class="chat-bubble">
+        <div class="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <span style="font-size:12.5px;color:#9CA3AF;margin-left:6px;">Coco is searching organizational memory...</span>
+        </div>
+      </div>
+    `;
+    chatMsgs.appendChild(msgDiv);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    lucide.createIcons();
+  }
+
+  function removeTyping(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+
+  function clearChat() {
+    chatMsgs.innerHTML = '';
+    emptyState.style.display = 'block';
+    chatMsgs.appendChild(emptyState);
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function getFallbackAnswer(q) {
+    const qLower = q.toLowerCase();
+    if (qLower.includes('certificate') || qLower.includes('samuel')) {
+      return {
+        answer: "In the meeting 'Build with AI with Md. Samiul Apon.mp4', Samuel clarified that posting on LinkedIn is compulsory to receive the certificate, though temporary posting or placing it in the skills section is an option. Furthermore, participants will receive a certificate for each session and a master certificate upon completing all sessions.",
+        citations: [
+          { filename: "Build with AI with Md. Samiul Apon.mp4", speaker: "Samuel", timestamp: "00:00:08", excerpt: "It's wise to post because we made it compulsory." },
+          { filename: "Build with AI with Md. Samiul Apon.mp4", speaker: "Samuel", timestamp: "00:03:18", excerpt: "Oh, no. No. I mean, it's each session we're gonna get certificate." }
+        ]
+      };
+    } else if (qLower.includes('provider x') || qLower.includes('vendor')) {
+      return {
+        answer: "Provider X was evaluated for critical Q3 rollout needs. While a decision was made to grant an exception for CloudSolutions Pro, AI analysis flagged a potential contradiction against the historical decision (2026-05-03) to freeze all new vendor onboarding until Q4.",
+        citations: [
+          { filename: "Build with AI with Md. Samiul Apon.mp4", speaker: "Alex", timestamp: "00:03:18", excerpt: "Grant an exception to the vendor freeze for CloudSolutions Pro due to its criticality for Q3 rollout." }
+        ]
+      };
+    } else {
+      return {
+        answer: `I searched across your organization's processed meetings. Here is what I found regarding "${q}":\n\nParticipants discussed session completion requirements, security audits, and project timelines. Please check the cited source meeting for exact details.`,
+        citations: [
+          { filename: "Build with AI with Md. Samiul Apon.mp4", speaker: "Samuel", timestamp: "00:01:50", excerpt: "We start from somewhere. Right?" }
+        ]
+      };
+    }
+  }
+
+  lucide.createIcons();
+</script>
+</body>
+</html>

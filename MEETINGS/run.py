@@ -199,7 +199,7 @@ def extract_names_from_video(video_path: str, interval_s: int = 10):
                     img_bytes = path.read_bytes()
                     prompt = 'List all participant names visible (name tags, video tiles). Return JSON: {"names":[...]}'
                     resp = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-2.0-flash",
                         contents=[
                             prompt,
                             types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
@@ -307,9 +307,9 @@ Return ONLY valid JSON:
 }}
 """
 
-    print("    Calling Gemini 2.5 Flash...")
+    print("    Calling Gemini 2.0 Flash...")
     resp = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash",
         contents=prompt,
         config={"response_mime_type": "application/json"}
     )

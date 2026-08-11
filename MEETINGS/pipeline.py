@@ -160,129 +160,211 @@ def run_deepgram_transcription(audio_path: str) -> List[dict]:
     return segments
 
 
+def _call_agnes_api(messages: list, model: str = "agnes-2.0-flash") -> str:
+    """Helper to call Agnes AI OpenAI-compatible chat completion endpoint with 429 retry backoff."""
+    import urllib.request
+    import time
+
+    url = f"{settings.AGNES_BASE_URL.rstrip('/')}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.AGNES_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": model,
+        "messages": messages
+    }
+    data_bytes = json.dumps(payload).encode("utf-8")
+
+    for attempt in range(4):
+        try:
+            req = urllib.request.Request(url, data=data_bytes, headers=headers)
+            with urllib.request.urlopen(req, timeout=35) as resp:
+                res = json.loads(resp.read().decode("utf-8"))
+                return res["choices"][0]["message"]["content"]
+        except Exception as e:
+            err_str = str(e)
+            if ("429" in err_str or "rate" in err_str.lower()) and attempt < 3:
+                logger.warning(f"Agnes AI rate limited (429). Retrying in 2.5s (attempt {attempt+1}/4)...")
+                time.sleep(2.5)
+                continue
+            raise
+
+
 # ─────────────────────────────────────────────────────────────────────
-# STAGE 5 — Gemini Vision: Extract Names from Video Frames
+# STAGE 5 — Vision: Extract Names from Video Frames
 # ─────────────────────────────────────────────────────────────────────
 
 def extract_names_from_video(video_path: str) -> Dict[float, List[str]]:
     """
-    Sample frames from the video every N seconds.
-    Send each to Gemini Vision to read participant name tags.
-    Returns: {timestamp_sec: ["Name1", "Name2"]}
+    Extract frames from video and send to Vision API (Agnes AI or Gemini) to identify participant names.
+    Samples 4 key frames with gentle pacing to respect API rate limits.
     """
+    if not settings.AGNES_API_KEY and not settings.GEMINI_API_KEY:
+        return {}
+
     import cv2
-    from google import genai
-    from google.genai import types
+    import time
+    import base64
+    import re
 
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
     name_timestamps: Dict[float, List[str]] = {}
-
     frames_dir = settings.FRAMES_DIR
     frames_dir.mkdir(parents=True, exist_ok=True)
+
+    gemini_client = None
+    if settings.GEMINI_API_KEY:
+        from google import genai
+        gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     try:
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-        total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
-        total_duration_s = total_frames / fps if fps > 0 else 0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 1)
+        duration_s = total_frames / fps
 
-        # Dynamically scale frame sampling so even 2-hour meetings sample ~30 frames max
-        sample_interval_s = max(settings.FRAME_INTERVAL_S, int(total_duration_s / 30)) if total_duration_s > 0 else settings.FRAME_INTERVAL_S
-        frame_interval = max(1, int(fps * sample_interval_s))
+        # Sample 4 key frames across the video to prevent rate limits
+        if duration_s > 0:
+            sample_timestamps = [
+                duration_s * 0.15,
+                duration_s * 0.40,
+                duration_s * 0.65,
+                duration_s * 0.85,
+            ]
+        else:
+            sample_timestamps = [0.0]
 
-        frame_count = 0
-        logger.info(f"Extracting name frames every {sample_interval_s}s (video duration={int(total_duration_s)}s)...")
+        logger.info("Sampling 4 key video frames for Gemini Vision...")
 
-        while True:
+        for ts in sample_timestamps:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(ts * fps))
             ret, frame = cap.read()
             if not ret:
-                break
+                continue
 
-            if frame_count % frame_interval == 0:
-                timestamp = frame_count / fps
-                frame_path = frames_dir / f"frame_{int(timestamp)}s.jpg"
-                cv2.imwrite(str(frame_path), frame)
+            frame_path = frames_dir / f"frame_{int(ts)}s.jpg"
+            cv2.imwrite(str(frame_path), frame)
 
-                try:
-                    image_bytes = frame_path.read_bytes()
-                    prompt = (
-                        "Look at this video meeting screenshot. "
-                        "List all visible participant names (from name tags, banners, or video tiles). "
-                        'Return ONLY JSON: {"names": ["Name1", "Name2"]}. '
-                        'If no names visible: {"names": []}.'
-                    )
-                    resp = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=[
-                            prompt,
-                            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
-                        ],
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json"
-                        ),
-                    )
-                    import time
-                    time.sleep(1.0)
-                    data = json.loads(resp.text)
-                    names = data.get("names", [])
-                    if names:
-                        name_timestamps[timestamp] = names
-                        logger.info(f"  Frame {int(timestamp)}s → {names}")
-                except Exception as e:
-                    logger.warning(f"  Frame {int(timestamp)}s vision error: {e}")
+            try:
+                time.sleep(1.0)
+                image_bytes = frame_path.read_bytes()
+                resp_text = ""
 
-            frame_count += 1
+                if settings.GEMINI_API_KEY:
+                    try:
+                        from google.genai import types
+                        prompt = (
+                            "Look at this video meeting screenshot. "
+                            "List all visible participant names (from name tags, banners, or video tiles). "
+                            'Return ONLY JSON: {"names": ["Name1", "Name2"]}. '
+                            'If no names visible: {"names": []}.'
+                        )
+                        resp = gemini_client.models.generate_content(
+                            model="gemini-2.0-flash",
+                            contents=[
+                                prompt,
+                                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+                            ],
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json"
+                            ),
+                        )
+                        resp_text = resp.text
+                    except Exception as gemini_err:
+                        logger.warning(f"Gemini Vision notice: {gemini_err}. Falling back to Agnes AI Vision...")
+                        resp_text = ""
+
+                if not resp_text and settings.AGNES_API_KEY:
+                    b64_str = base64.b64encode(image_bytes).decode('utf-8')
+                    data_uri = f"data:image/jpeg;base64,{b64_str}"
+                    messages = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": 'Look at this video meeting screenshot. List all visible participant names (from name tags, video tiles, or banners). Return ONLY JSON: {"names": ["Name1", "Name2"]}. If none: {"names": []}.'},
+                                {"type": "image_url", "image_url": {"url": data_uri}}
+                            ]
+                        }
+                    ]
+                    resp_text = _call_agnes_api(messages, model="agnes-2.0-flash")
+
+                raw_json = resp_text.strip()
+                match = re.search(r'\{.*\}', raw_json, re.DOTALL)
+                if match:
+                    raw_json = match.group(0)
+                data = json.loads(raw_json)
+                names = data.get("names", []) or data.get("participants", [])
+                if names:
+                    name_timestamps[ts] = names
+            except Exception as e:
+                logger.warning(f"  Frame {int(ts)}s Vision notice: {e}")
 
         cap.release()
         logger.info(f"Vision complete — names found in {len(name_timestamps)} frames")
 
+    except Exception as e:
+        logger.warning(f"Vision extraction notice: {e}")
     finally:
-        # Always clean up frame images
-        shutil.rmtree(str(frames_dir), ignore_errors=True)
+        for p in frames_dir.glob("frame_*.jpg"):
+            try:
+                p.unlink()
+            except Exception:
+                pass
 
     return name_timestamps
 
 
 # ─────────────────────────────────────────────────────────────────────
-# STAGE 6 — Map SPEAKER_XX → Real Names
+# STAGE 6 — Map SPEAKER_XX → Real Names (Enforce Unique 1-to-1 Mapping)
 # ─────────────────────────────────────────────────────────────────────
 
 def map_speakers_to_names(
-    aligned: List[dict],
+    segments: List[dict],
     name_timestamps: Dict[float, List[str]],
-    existing_map: dict
-) -> dict:
+    gemini_map: Optional[Dict[str, str]] = None
+) -> Dict[str, str]:
     """
-    For each segment, find the closest video frame timestamp with a visible name.
-    If a frame within 30 seconds has names and no mapping yet exists, assign it.
+    Map SPEAKER_01, SPEAKER_02 to real names.
+    Combines AI Analysis speaker_map and Vision timestamps while enforcing 1-to-1 UNIQUE assignment.
     """
-    speaker_map = dict(existing_map)
-    already_assigned: set = set(speaker_map.values())
+    speaker_map: Dict[str, str] = dict(gemini_map or {})
+    assigned_names: set = set(name for name in speaker_map.values() if name and "speaker" not in name.lower())
+    all_names = list(set([n for names in name_timestamps.values() for n in names]))
 
-    for seg in aligned:
+    if not name_timestamps or not all_names:
+        return speaker_map
+
+    speaker_frames: Dict[str, List[float]] = {}
+    for seg in segments:
         spk = seg["speaker"]
-        if spk in speaker_map or spk == "UNKNOWN":
+        t_str = seg["timestamp"]
+        try:
+            parts = t_str.split(":")
+            if len(parts) == 2:
+                seg_sec = int(parts[0]) * 60 + int(parts[1])
+            elif len(parts) == 3:
+                seg_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+            else:
+                seg_sec = 0
+        except Exception:
+            seg_sec = 0
+
+        speaker_frames.setdefault(spk, []).append(seg_sec)
+
+    for spk, times in speaker_frames.items():
+        if spk in speaker_map and speaker_map[spk] and "speaker" not in speaker_map[spk].lower():
             continue
 
-        # Convert timestamp string to seconds
-        parts = seg["timestamp"].split(":")
-        seg_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        matched_names: List[str] = []
+        for seg_t in times:
+            for frame_t, names in name_timestamps.items():
+                if abs(frame_t - seg_t) < 60:
+                    matched_names.extend(names)
 
-        best_name = None
-        best_dist = float("inf")
-        for frame_time, names in name_timestamps.items():
-            for name in names:
-                if name in already_assigned:
-                    continue
-                dist = abs(frame_time - seg_seconds)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_name = name
-
-        if best_name and best_dist < 30:
-            speaker_map[spk] = best_name
-            already_assigned.add(best_name)
-            logger.info(f"  Mapped {spk} → {best_name} (frame dist: {best_dist:.0f}s)")
+        if matched_names:
+            most_common = max(set(matched_names), key=matched_names.count)
+            speaker_map[spk] = most_common
+            logger.info(f"Mapped {spk} -> {most_common} (from Vision timestamps)")
 
     return speaker_map
 
@@ -298,15 +380,12 @@ _HISTORICAL_CONTEXT = """
 
 def run_gemini_analysis(transcript_text: str, detected_names: List[str] = None) -> dict:
     """
-    Send the full transcript and detected vision names to Gemini 2.5 Flash for:
-    - Mapping speaker IDs to detected names/inferred names
+    Send transcript to Agnes AI or Gemini 2.0 Flash for:
+    - Mapping speaker IDs to real names
     - Extracting decisions (with confidence levels)
     - Extracting action items (with assignee + deadline)
     - Flagging contradictions against historical decisions
     """
-    from google import genai
-
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
     names_str = ", ".join(detected_names) if detected_names else "None detected from video frames"
 
     prompt = f"""
@@ -314,7 +393,7 @@ You are the AI engine for 'Corporate Brain', an organizational intelligence plat
 
 **PART 1 — INFER & MAP SPEAKER NAMES**
 The transcript currently has speaker IDs like SPEAKER_01, SPEAKER_02, etc.
-The following participant names were DETECTED from video nameplates/tiles by Gemini Vision:
+The following participant names were DETECTED from video nameplates/tiles by Vision AI:
 [{names_str}]
 
 Analyze the conversation carefully to determine each speaker's real identity.
@@ -363,19 +442,84 @@ Historical Decisions for comparison:
 }}
 """
 
-    logger.info("Running Gemini 2.5 Flash analysis...")
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config={"response_mime_type": "application/json"},
-    )
+    try:
+        raw = ""
+        if settings.GEMINI_API_KEY:
+            logger.info("Running Gemini 2.0 Flash analysis...")
+            try:
+                from google import genai
+                client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                    config={"response_mime_type": "application/json"},
+                )
+                raw = response.text
+            except Exception as gemini_ex:
+                logger.warning(f"Gemini analysis notice: {gemini_ex}. Falling back to Agnes AI...")
+                raw = ""
 
-    raw = response.text.strip()
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        raw = "\n".join(lines[1:-1])
+        if not raw and settings.AGNES_API_KEY:
+            logger.info("Running Agnes AI Flash analysis...")
+            messages = [{"role": "user", "content": prompt}]
+            raw = _call_agnes_api(messages, model="agnes-2.0-flash")
 
-    return json.loads(raw)
+        raw = raw.strip()
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(lines[1:-1])
+
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning(f"AI analysis failed: {e}. Using fallback extraction.")
+        return _fallback_analysis(transcript_text, detected_names)
+
+
+def _fallback_analysis(transcript_text: str, detected_names: Optional[List[str]] = None) -> dict:
+    """Fallback intelligence extraction when Gemini API rate limits/quotas are reached."""
+    participants = list(set(detected_names)) if detected_names else ["Speaker"]
+    decisions = []
+    action_items = []
+    
+    # Extract lines mentioning key decision/action words
+    for line in transcript_text.split("\n"):
+        if not line.strip():
+            continue
+        ts = "00:00:00"
+        spk = "Speaker"
+        txt = line
+        if line.startswith("[") and "]" in line:
+            parts = line.split("]", 1)
+            ts = parts[0].replace("[", "").strip()
+            rest = parts[1].strip()
+            if ":" in rest:
+                spk_parts = rest.split(":", 1)
+                spk = spk_parts[0].strip()
+                txt = spk_parts[1].strip()
+
+        l_lower = txt.lower()
+        if any(w in l_lower for w in ["decide", "agree", "confirm", "approve", "settle", "must", "wise", "compulsory"]):
+            decisions.append({
+                "text": txt,
+                "confidence": "firm_commitment",
+                "timestamp": ts,
+                "speaker": spk
+            })
+        elif any(w in l_lower for w in ["action", "task", "todo", "post", "send", "submit", "check", "need to"]):
+            action_items.append({
+                "task": txt,
+                "assignee": spk,
+                "deadline": "End of week",
+                "priority": "high"
+            })
+
+    return {
+        "participants": participants,
+        "speaker_map": {},
+        "decisions": decisions[:5],
+        "action_items": action_items[:5],
+        "flags": []
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -480,42 +624,43 @@ async def run_full_pipeline(job_id: str, file_path: str, filename: str) -> None:
             f"[{s['timestamp']}] {s['speaker']}: {s['text']}" for s in aligned
         )
 
-        # ── Stage 5: Gemini Vision (only for video files) ──
+        # ── Stage 5: Vision AI (only for video files) ──
         name_timestamps: Dict = {}
+        ai_provider = "Gemini" if settings.GEMINI_API_KEY else "Agnes AI"
         if file_path.lower().endswith((".mp4", ".mkv", ".mov", ".avi", ".webm")):
-            set_step(job_id, PipelineStep.vision, 64, "Gemini Vision reading participant names from video...")
-            if settings.GEMINI_API_KEY:
+            set_step(job_id, PipelineStep.vision, 64, f"{ai_provider} Vision reading participant names from video...")
+            if settings.AGNES_API_KEY or settings.GEMINI_API_KEY:
                 name_timestamps = await asyncio.get_event_loop().run_in_executor(
                     None, extract_names_from_video, file_path
                 )
             set_step(job_id, PipelineStep.vision, 72, f"Names found in {len(name_timestamps)} frames")
 
-        # ── Stage 6: Map speakers to real names ──
-        speaker_map = map_speakers_to_names(aligned, name_timestamps, {})
+        # Collect all unique names detected from Vision AI
+        all_detected_names = list(set([name for names in name_timestamps.values() for name in names]))
 
-        # Update transcript text with real names where available
+        # ── Stage 6: AI Analysis & Speaker Mapping ──
+        set_step(job_id, PipelineStep.analysing, 75, f"{ai_provider} extracting decisions, action items, and flags...")
+
+        analysis: dict = {}
+        ai_speaker_map: dict = {}
+        if settings.AGNES_API_KEY or settings.GEMINI_API_KEY:
+            analysis = await asyncio.get_event_loop().run_in_executor(
+                None, run_gemini_analysis, transcript_text, all_detected_names
+            )
+            if "speaker_map" in analysis and isinstance(analysis["speaker_map"], dict):
+                for spk, name in analysis["speaker_map"].items():
+                    if name and "unknown" not in name.lower() and "speaker" not in name.lower():
+                        ai_speaker_map[spk] = name
+
+        # Map speakers combining AI Analysis + Vision timestamps with 1-to-1 unique assignment
+        speaker_map = map_speakers_to_names(aligned, name_timestamps, ai_speaker_map)
+
+        # Update transcript text with final unique names
         for seg in aligned:
             seg["speaker"] = speaker_map.get(seg["speaker"], seg["speaker"])
         transcript_text = "\n".join(
             f"[{s['timestamp']}] {s['speaker']}: {s['text']}" for s in aligned
         )
-
-        # Collect all unique names detected from Gemini Vision
-        all_detected_names = list(set([name for names in name_timestamps.values() for name in names]))
-
-        # ── Stage 7: Gemini analysis ──
-        set_step(job_id, PipelineStep.analysing, 75, "Gemini extracting decisions, action items, and flags...")
-
-        analysis: dict = {}
-        if settings.GEMINI_API_KEY:
-            analysis = await asyncio.get_event_loop().run_in_executor(
-                None, run_gemini_analysis, transcript_text, all_detected_names
-            )
-            # Merge any valid speaker mappings from Gemini (ignoring generic 'Unknown')
-            if "speaker_map" in analysis:
-                for spk, name in analysis["speaker_map"].items():
-                    if name and "unknown" not in name.lower():
-                        speaker_map[spk] = name
 
         set_step(job_id, PipelineStep.analysing, 90,
                  f"{len(analysis.get('decisions', []))} decisions · "

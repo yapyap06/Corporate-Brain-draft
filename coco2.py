@@ -206,7 +206,7 @@ def extract_names_from_video(video_path: str, api_key: str) -> Dict:
             
             try:
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-2.0-flash',
                     contents=[prompt, {"mime_type": "image/jpeg", "data": image_data}],
                     config={'response_mime_type': 'application/json'}
                 )
@@ -311,9 +311,9 @@ def run_gemini_analysis(transcript: str, api_key: str) -> Dict:
     }}
     """
     
-    print("🧠 Running Gemini 2.5 Flash analysis...")
+    print("🧠 Running Gemini 2.0 Flash analysis...")
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
+        model='gemini-2.0-flash',
         contents=prompt,
         config={'response_mime_type': 'application/json'}
     )
